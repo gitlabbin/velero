@@ -20,7 +20,9 @@ import (
 	go_context "context"
 	"encoding/json"
 	"fmt"
+	"golang.org/x/net/context"
 	"io"
+	"k8s.io/client-go/dynamic"
 	"os"
 	"path/filepath"
 	"sort"
@@ -46,6 +48,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/gedex/inflector"
 	"github.com/vmware-tanzu/velero/internal/credentials"
 	"github.com/vmware-tanzu/velero/internal/hook"
 	velerov1api "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
@@ -1181,7 +1184,7 @@ func (ctx *restoreContext) restoreItem(obj *unstructured.Unstructured, groupReso
 
 	objStatus, statusFieldExists, statusFieldErr := unstructured.NestedFieldCopy(obj.Object, "status")
 	// Clear out non-core metadata fields and status.
-	if obj, err = resetMetadataAndStatus(obj); err != nil {
+	if obj, err = resetMetadataAndStatus(obj, namespace); err != nil {
 		errs.Add(namespace, err)
 		return warnings, errs, itemExists
 	}
@@ -1369,7 +1372,7 @@ func (ctx *restoreContext) restoreItem(obj *unstructured.Unstructured, groupReso
 		itemStatus.itemExists = itemExists
 		ctx.restoredItems[itemKey] = itemStatus
 		// Remove insubstantial metadata.
-		fromCluster, err = resetMetadataAndStatus(fromCluster)
+		fromCluster, err = resetMetadataAndStatus(fromCluster, namespace)
 		if err != nil {
 			ctx.log.Infof("Error trying to reset metadata for %s: %v", kube.NamespaceAndName(obj), err)
 			warnings.Add(namespace, err)
@@ -1810,7 +1813,7 @@ func resetVolumeBindingInfo(obj *unstructured.Unstructured) *unstructured.Unstru
 	return obj
 }
 
-func resetMetadata(obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+func resetMetadata(obj *unstructured.Unstructured, namespace string) (*unstructured.Unstructured, error) {
 	res, ok := obj.Object["metadata"]
 	if !ok {
 		return nil, errors.New("metadata not found")
@@ -1822,8 +1825,10 @@ func resetMetadata(obj *unstructured.Unstructured) (*unstructured.Unstructured, 
 
 	for k := range metadata {
 		switch k {
+		case "ownerReferences":
+			patchMetadata(metadata, k, namespace)
 		case "generateName", "selfLink", "uid", "resourceVersion", "generation", "creationTimestamp", "deletionTimestamp",
-			"deletionGracePeriodSeconds", "ownerReferences":
+			"deletionGracePeriodSeconds":
 			delete(metadata, k)
 		}
 	}
@@ -1831,12 +1836,86 @@ func resetMetadata(obj *unstructured.Unstructured) (*unstructured.Unstructured, 
 	return obj, nil
 }
 
+// Patch metadata with uid
+func patchMetadata(metadata map[string]interface{}, k string, namespace string) (*unstructured.Unstructured, error) {
+	ownerRefers := metadata[k].([]interface{})
+	mobj, ok := ownerRefers[0].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("want type map[string]interface{}, got %T", ownerRefers[0])
+	}
+
+	cfg, err := client.LoadConfig()
+	if err != nil {
+		return nil, errors.Wrap(err, "reading client config file")
+	}
+
+	fc := client.NewFactory("APIGroupVersionsRestore", cfg)
+
+	dynamic, err := fc.DynamicClient()
+	if err != nil {
+		return nil, errors.Wrap(err, "getting Dynamic client")
+	}
+
+	ctx := context.Background()
+	apiVersion := strings.Split(mobj["apiVersion"].(string), "/")
+
+	if len(apiVersion) == 1 {
+		fmt.Printf("ownerRefers: %v\n", mobj)
+		//delete(metadata, k)
+		return nil, nil
+	}
+
+	var fromClusters []unstructured.Unstructured
+	fromClusters, err = getResourcesDynamically(dynamic, ctx, apiVersion[0], apiVersion[1],
+		inflector.Pluralize(strings.ToLower(mobj["kind"].(string))), namespace)
+
+	if err != nil {
+		fmt.Println(err)
+		fmt.Printf("Can't find object: %s\n", mobj["kind"].(string))
+		fmt.Printf("Can't find object apiVersion: %s\n", mobj["apiVersion"].(string))
+		fmt.Printf("Can't find object namespace: %s\n", namespace)
+		fmt.Printf("Can't find object for metadata: %v", mobj)
+		return nil, err
+	} else {
+		for _, item := range fromClusters {
+			fmt.Printf("ITEM: %+v\n", item)
+			fmt.Printf("UID: %v\n", item.GetUID())
+			mobj["uid"] = fmt.Sprintf("%s", item.GetUID())
+			fmt.Printf("After patched: %v", ownerRefers)
+		}
+	}
+
+	//fromCluster, err := resourceClient.Get(mobj["name"].(string), metav1.GetOptions{})
+	return nil, nil
+}
+
+func getResourcesDynamically(dynamic dynamic.Interface, ctx context.Context,
+	group string, version string, resource string, namespace string) (
+	[]unstructured.Unstructured, error) {
+
+	resourceId := schema.GroupVersionResource{
+		Group:    group,
+		Version:  version,
+		Resource: resource,
+	}
+	list, err := dynamic.Resource(resourceId).Namespace(namespace).
+		List(ctx, metav1.ListOptions{})
+
+	if err != nil {
+		return nil, err
+	}
+	return list.Items, nil
+
+	return nil, fmt.Errorf("no item found: %s", resource)
+
+}
+
 func resetStatus(obj *unstructured.Unstructured) {
 	unstructured.RemoveNestedField(obj.UnstructuredContent(), "status")
 }
 
-func resetMetadataAndStatus(obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
-	_, err := resetMetadata(obj)
+func resetMetadataAndStatus(obj *unstructured.Unstructured, namespace string) (*unstructured.Unstructured, error) {
+	_, err := resetMetadata(obj, namespace)
 	if err != nil {
 		return nil, err
 	}

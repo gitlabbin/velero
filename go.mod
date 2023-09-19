@@ -14,6 +14,7 @@ require (
 	github.com/bombsimon/logrusr/v3 v3.0.0
 	github.com/evanphx/json-patch v5.6.0+incompatible
 	github.com/fatih/color v1.13.0
+	github.com/gedex/inflector v0.0.0-20170307190818-16278e9db813
 	github.com/gobwas/glob v0.2.3
 	github.com/golang/protobuf v1.5.2
 	github.com/google/go-cmp v0.5.8

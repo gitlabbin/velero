@@ -62,7 +62,7 @@ HUGO_IMAGE := hugo-builder
 local : ARCH ?= $(shell go env GOOS)-$(shell go env GOARCH)
 ARCH ?= linux-amd64
 
-VERSION ?= main
+VERSION ?= v1.11.1.14
 
 TAG_LATEST ?= false
 
@@ -283,6 +283,10 @@ ifneq "$(origin BUILDER_IMAGE_DOCKERFILE)" "file"
 else
 	docker push $(BUILDER_IMAGE)
 endif
+
+publish:
+	docker tag velero/velero:$(VERSION) briangxchen/velero:$(VERSION)
+	docker push briangxchen/velero:$(VERSION)
 
 build-image-hugo:
 	cd site && docker build --pull -t $(HUGO_IMAGE) .

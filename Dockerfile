@@ -70,6 +70,8 @@ FROM gcr.io/distroless/base-nossl-debian11@sha256:9523ef8cf054e23a81e722d231c6f6
 
 LABEL maintainer="Nolan Brubaker <brubakern@vmware.com>"
 
+COPY --from=busybox:1.35.0-uclibc /bin/sh /bin/sh
+
 COPY --from=velero-builder /output /
 
 COPY --from=restic-builder /output /
