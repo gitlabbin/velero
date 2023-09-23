@@ -1862,7 +1862,10 @@ func patchMetadata(metadata map[string]interface{}, k string, namespace string) 
 	if len(apiVersion) == 1 {
 		fmt.Printf("ownerRefers: %v\n", mobj)
 		//delete(metadata, k)
-		return nil, nil
+		resourceMap := kindResourceMap[mobj["kind"].(string)]
+		apiVersion[0] = resourceMap.Group
+		apiVersion = append(apiVersion, resourceMap.Version)
+		//return nil, nil
 	}
 
 	var fromClusters []unstructured.Unstructured
