@@ -1880,8 +1880,12 @@ func patchMetadata(metadata map[string]interface{}, k string, namespace string) 
 		for _, item := range fromClusters {
 			fmt.Printf("ITEM: %+v\n", item)
 			fmt.Printf("UID: %v\n", item.GetUID())
-			mobj["uid"] = fmt.Sprintf("%s", item.GetUID())
-			fmt.Printf("After patched: %v", ownerRefers)
+			if item.GetName() == mobj["name"].(string) {
+				mobj["uid"] = fmt.Sprintf("%s", item.GetUID())
+				fmt.Printf("After patched: %v", ownerRefers)
+			} else {
+				fmt.Printf("item name not matching expected: %s, but: %s", mobj["name"].(string), item.GetName())
+			}
 		}
 	}
 
