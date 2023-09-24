@@ -1874,7 +1874,7 @@ func patchMetadata(metadata map[string]interface{}, k string, namespace string) 
 
 	if err != nil {
 		fmt.Println(err)
-		fmt.Printf("Can't find object: %s\n", mobj["kind"].(string))
+		fmt.Printf("%s can't find ownerReference object: %s\n", mobj["kind"].(string), metadata["name"].(string))
 		fmt.Printf("Can't find object apiVersion: %s\n", mobj["apiVersion"].(string))
 		fmt.Printf("Can't find object namespace: %s\n", namespace)
 		fmt.Printf("Can't find object for metadata: %v", mobj)
