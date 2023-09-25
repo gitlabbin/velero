@@ -286,6 +286,7 @@ endif
 
 publish:
 	docker tag velero/velero:$(VERSION) briangxchen/velero:$(VERSION)
+	docker login
 	docker push briangxchen/velero:$(VERSION)
 
 build-image-hugo:
