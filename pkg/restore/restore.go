@@ -1826,6 +1826,7 @@ func resetMetadata(obj *unstructured.Unstructured, namespace string) (*unstructu
 	for k := range metadata {
 		switch k {
 		case "ownerReferences":
+			fmt.Printf("Object: %v\n", obj)
 			patchMetadata(metadata, k, namespace)
 		case "generateName", "selfLink", "uid", "resourceVersion", "generation", "creationTimestamp", "deletionTimestamp",
 			"deletionGracePeriodSeconds":
